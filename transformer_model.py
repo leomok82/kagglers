@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 # from mamba_ssm import  Mamba
-
+from utils import *
 class MultiHeadAttention(nn.Module):
     def __init__(self, embed_size, num_heads = 8, bias = True):
         super(MultiHeadAttention, self).__init__()
@@ -219,3 +219,24 @@ class Transformer(nn.Module):
         x = self.final_layer(x)
 
         return x
+    def ladder(self, x, z, mutation_rates = [0.1,0.5,1], device ='cuda', pos_rate = 0.01):
+        ladder_losses = 0
+        def triplet_loss_func( dist1 ,dist2, div ):
+    
+            return torch.clamp(div  + dist1 - dist2 , min=1e-12)**2
+        
+        
+        positive = noisy(x, pos_rate) 
+        positive_z = self.forward(positive.to(device))
+        pos_dist = self.dist_func(z, positive_z)
+
+        for rate in mutation_rates:
+            negative =noisy(x, rate)
+            negative = negative.to(device)
+            negative_z = self.forward(negative)
+            neg_dist = self.dist_func(z, negative_z)
+            ladder_losses+= triplet_loss_func( pos_dist ,neg_dist, 1 )
+        
+        
+        ladderLoss = ladder_losses.mean()/ max(len(mutation_rates),1)
+        return ladderLoss
